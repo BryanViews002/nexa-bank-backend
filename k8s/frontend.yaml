@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexa-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nexa-frontend
+  template:
+    metadata:
+      labels:
+        app: nexa-frontend
+    spec:
+      containers:
+      - name: nexa-frontend
+        image: nexa-frontend:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexa-frontend
+spec:
+  selector:
+    app: nexa-frontend
+  ports:
+  - port: 80
+    targetPort: 80
+  type: NodePort

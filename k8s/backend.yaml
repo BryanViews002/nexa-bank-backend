@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexa-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nexa-backend
+  template:
+    metadata:
+      labels:
+        app: nexa-backend
+    spec:
+      containers:
+      - name: nexa-backend
+        image: nexa-backend:latest
+        imagePullPolicy: Never
+        env:
+        - name: SPRING_DATASOURCE_URL
+          value: "jdbc:mysql://mysql:3306/bank_app?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC"
+        - name: SPRING_DATASOURCE_USERNAME
+          value: "root"
+        - name: SPRING_DATASOURCE_PASSWORD
+          value: "Emmanuel12@$"
+        ports:
+        - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexa-backend
+spec:
+  selector:
+    app: nexa-backend
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: NodePort
