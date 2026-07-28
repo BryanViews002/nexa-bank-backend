@@ -14,8 +14,8 @@ spec:
     spec:
       containers:
       - name: nexa-backend
-        image: nexa-backend:latest
-        imagePullPolicy: Never
+        image: localhost:5000/nexa-backend:latest
+        imagePullPolicy: Always
         env:
         - name: SPRING_DATASOURCE_URL
           value: "jdbc:mysql://mysql:3306/bank_app?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC"
@@ -23,6 +23,8 @@ spec:
           value: "root"
         - name: SPRING_DATASOURCE_PASSWORD
           value: "Emmanuel12@$"
+        - name: CORS_ALLOWED_ORIGINS
+          value: "https://symmetrical-space-potato-6946qw99r4jq35jj5-3000.app.github.dev,http://localhost:5173,http://localhost:3000"
         ports:
         - containerPort: 8080
 ---

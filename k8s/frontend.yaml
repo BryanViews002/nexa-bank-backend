@@ -14,8 +14,8 @@ spec:
     spec:
       containers:
       - name: nexa-frontend
-        image: nexa-frontend:latest
-        imagePullPolicy: Never
+        image: localhost:5000/nexa-frontend:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 80
 ---
