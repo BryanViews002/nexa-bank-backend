@@ -27,6 +27,9 @@ public class Otp {
 
     private boolean used;
 
+    @Column(name = "failed_attempts", nullable = false)
+    private int failedAttempts;
+
     private Instant createdAt;
 
     @PrePersist

@@ -1,12 +1,23 @@
 package com.example.bank.service;
 
+import com.example.bank.entity.Otp;
 import com.example.bank.entity.User;
+import com.example.bank.repository.OtpRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.HexFormat;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -14,127 +25,134 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class OtpService {
 
-    private final Map<String, OtpData> otpStore = new ConcurrentHashMap<>();
+    private static final int OTP_EXPIRY_MINUTES = 5;
+    private static final int MAX_VERIFICATION_ATTEMPTS = 5;
+    private static final int MAX_GENERATIONS_PER_TEN_MINUTES = 3;
+
+    private final OtpRepository otpRepository;
     private final SecureRandom random = new SecureRandom();
-    private final int OTP_EXPIRY_MINUTES = 5;
+    private final Map<String, DevOtp> devOtpStore = new ConcurrentHashMap<>();
     private final String activeProfile;
+    private final String otpPepper;
 
-    public OtpService(@Value("${spring.profiles.active:prod}") String activeProfile) {
+    public OtpService(
+            OtpRepository otpRepository,
+            @Value("${spring.profiles.active:prod}") String activeProfile,
+            @Value("${app.security.otp-pepper}") String otpPepper
+    ) {
+        this.otpRepository = otpRepository;
         this.activeProfile = activeProfile;
+        this.otpPepper = otpPepper;
     }
 
-    /**
-     * Generates a 6-digit OTP for the given user and purpose
-     */
-    public void generateOtp(User user, String purpose) {
-        String code = String.format("%06d", random.nextInt(1000000));
-        String key = user.getId() + "_" + purpose;
-
-        OtpData otpData = new OtpData(code, LocalDateTime.now().plusMinutes(OTP_EXPIRY_MINUTES));
-        otpStore.put(key, otpData);
-
-        // Log OTP in dev mode for frontend or console access
-        if ("dev".equals(activeProfile)) {
-            log.info("🔐 [DEV] Generated OTP for user '{}' (ID: {}) with purpose '{}': {}",
-                    user.getUsername(), user.getId(), purpose, code);
-            log.debug("OTP expires at: {}", otpData.getExpiryTime());
+    @Transactional
+    public String generateOtp(User user, String purposeValue) {
+        Otp.OtpPurpose purpose = parsePurpose(purposeValue);
+        Instant tenMinutesAgo = Instant.now().minus(10, ChronoUnit.MINUTES);
+        long recentCodes = otpRepository.countByUserIdAndPurposeAndCreatedAtAfter(
+                user.getId(),
+                purpose,
+                tenMinutesAgo
+        );
+        if (recentCodes >= MAX_GENERATIONS_PER_TEN_MINUTES) {
+            throw new IllegalStateException("Too many OTP requests. Try again later.");
         }
+
+        String code = String.format("%06d", random.nextInt(1_000_000));
+        Otp otp = new Otp();
+        otp.setUser(user);
+        otp.setPurpose(purpose);
+        otp.setCode(hash(user.getId(), purpose, code));
+        otp.setExpiresAt(Instant.now().plus(OTP_EXPIRY_MINUTES, ChronoUnit.MINUTES));
+        otp.setUsed(false);
+        otp.setFailedAttempts(0);
+        otpRepository.save(otp);
+
+        if (isDev()) {
+            devOtpStore.put(key(user.getId(), purpose), new DevOtp(code, otp.getExpiresAt()));
+            log.info("[DEV] OTP generated for user ID {} and purpose {}", user.getId(), purpose);
+        }
+        return code;
     }
 
-    /**
-     * Verifies the OTP for the given user and purpose
-     */
-    public boolean verifyOtp(User user, String code, String purpose) {
-        String key = user.getId() + "_" + purpose;
-        OtpData otpData = otpStore.get(key);
-
-        log.info("🔍 OTP verification attempt for user '{}' with purpose '{}', provided code: {}",
-                user.getUsername(), purpose, code);
-
-        if (otpData == null) {
-            log.warn("❌ No OTP found for user '{}' with purpose '{}'", user.getUsername(), purpose);
+    @Transactional
+    public boolean verifyOtp(User user, String code, String purposeValue) {
+        Otp.OtpPurpose purpose = parsePurpose(purposeValue);
+        Otp otp = otpRepository.findLatestValidOtp(user.getId(), purpose).orElse(null);
+        if (otp == null) {
             return false;
         }
 
-        if (LocalDateTime.now().isAfter(otpData.getExpiryTime())) {
-            log.warn("⏰ OTP expired for user '{}' with purpose '{}'. Expired at: {}",
-                    user.getUsername(), purpose, otpData.getExpiryTime());
-            otpStore.remove(key);
+        if (otp.getFailedAttempts() >= MAX_VERIFICATION_ATTEMPTS) {
+            otp.setUsed(true);
+            otpRepository.save(otp);
             return false;
         }
 
-        if (otpData.getCode().equals(code)) {
-            log.info("✅ OTP verification successful for user '{}' with purpose '{}'",
-                    user.getUsername(), purpose);
-            otpStore.remove(key);
+        boolean matches = MessageDigest.isEqual(
+                otp.getCode().getBytes(StandardCharsets.UTF_8),
+                hash(user.getId(), purpose, code).getBytes(StandardCharsets.UTF_8)
+        );
+        if (matches) {
+            otp.setUsed(true);
+            otpRepository.save(otp);
+            devOtpStore.remove(key(user.getId(), purpose));
             return true;
         }
 
-        log.warn("❌ Invalid OTP provided for user '{}' with purpose '{}'. Expected: {}, Provided: {}",
-                user.getUsername(), purpose, otpData.getCode(), code);
+        otp.setFailedAttempts(otp.getFailedAttempts() + 1);
+        if (otp.getFailedAttempts() >= MAX_VERIFICATION_ATTEMPTS) {
+            otp.setUsed(true);
+        }
+        otpRepository.save(otp);
         return false;
     }
 
-    /**
-     * Retrieves the latest OTP for the given user and purpose (dev mode only)
-     */
-    public String getLatestOtp(User user, String purpose) {
-        if (!"dev".equals(activeProfile)) {
-            log.warn("Attempt to access OTP retrieval in non-dev profile for user: {}", user.getUsername());
-            throw new UnsupportedOperationException("OTP retrieval is only available in dev profile");
+    public String getLatestOtp(User user, String purposeValue) {
+        if (!isDev()) {
+            throw new UnsupportedOperationException("OTP retrieval is only available in the dev profile");
         }
-        String key = user.getId() + "_" + purpose;
-        OtpData otpData = otpStore.get(key);
-        if (otpData == null || LocalDateTime.now().isAfter(otpData.getExpiryTime())) {
-            log.warn("No valid OTP found for user '{}' with purpose '{}'", user.getUsername(), purpose);
+        Otp.OtpPurpose purpose = parsePurpose(purposeValue);
+        DevOtp otp = devOtpStore.get(key(user.getId(), purpose));
+        if (otp == null || otp.expiresAt().isBefore(Instant.now())) {
+            devOtpStore.remove(key(user.getId(), purpose));
             return null;
         }
-        log.info("Retrieved OTP for user '{}' with purpose '{}': {}", user.getUsername(), purpose, otpData.getCode());
-        return otpData.getCode();
+        return otp.code();
     }
 
-    /**
-     * Removes expired OTPs from the store
-     */
+    @Scheduled(fixedDelayString = "${app.security.otp-cleanup-ms:60000}")
     public void cleanupExpiredOtps() {
-        int initialSize = otpStore.size();
-        otpStore.entrySet().removeIf(entry ->
-                LocalDateTime.now().isAfter(entry.getValue().getExpiryTime()));
-        int removedCount = initialSize - otpStore.size();
-        if (removedCount > 0) {
-            log.debug("🧹 Cleaned up {} expired OTPs. Remaining: {}", removedCount, otpStore.size());
+        devOtpStore.entrySet().removeIf(entry -> entry.getValue().expiresAt().isBefore(Instant.now()));
+    }
+
+    private Otp.OtpPurpose parsePurpose(String purpose) {
+        try {
+            return Otp.OtpPurpose.valueOf(purpose.toUpperCase());
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("Unsupported OTP purpose");
         }
     }
 
-    /**
-     * Development helper method to see all active OTPs
-     */
-    public void logActiveOtps() {
-        if ("dev".equals(activeProfile)) {
-            log.info("📊 Active OTPs in store: {}", otpStore.size());
-            otpStore.forEach((key, otpData) ->
-                    log.info("  Key: {} -> Code: {}, Expires: {}", key, otpData.getCode(), otpData.getExpiryTime()));
+    private String hash(Long userId, Otp.OtpPurpose purpose, String code) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(otpPepper.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            String value = userId + ":" + purpose + ":" + code;
+            return HexFormat.of().formatHex(mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("Unable to secure OTP", e);
         }
     }
 
-    /**
-     * Inner class to hold OTP data
-     */
-    private static class OtpData {
-        private final String code;
-        private final LocalDateTime expiryTime;
+    private String key(Long userId, Otp.OtpPurpose purpose) {
+        return userId + ":" + purpose;
+    }
 
-        public OtpData(String code, LocalDateTime expiryTime) {
-            this.code = code;
-            this.expiryTime = expiryTime;
-        }
+    private boolean isDev() {
+        return "dev".equalsIgnoreCase(activeProfile);
+    }
 
-        public String getCode() {
-            return code;
-        }
-
-        public LocalDateTime getExpiryTime() {
-            return expiryTime;
-        }
+    private record DevOtp(String code, Instant expiresAt) {
     }
 }

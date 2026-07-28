@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Map;
+import java.math.BigDecimal;
 
 @Service
 @Transactional
@@ -98,13 +99,18 @@ public class AuthService implements UserDetailsService {
         user.setEnabled(true);
         user.setFailedLoginCount(0);
         user.setLocked(false);
+        user.setKycStatus(User.KycStatus.NOT_SUBMITTED);
 
         try {
             User saved = userRepository.save(user);
             auditService.log(saved.getId(), "USER_REGISTERED", Map.of("username", saved.getUsername()));
             // Auto-create SAVINGS account with $25 bonus for first account
             boolean isFirstAccount = accountService.getUserAccounts(saved).isEmpty();
-            accountService.openAccount(saved, "SAVINGS", isFirstAccount ? 25.0 : 0.0);
+            accountService.openAccount(
+                    saved,
+                    "SAVINGS",
+                    isFirstAccount ? new BigDecimal("25.00") : BigDecimal.ZERO
+            );
             log.info("User registered successfully with Nexa: {} with ID: {}", saved.getUsername(), saved.getId());
             return saved;
         } catch (Exception e) {

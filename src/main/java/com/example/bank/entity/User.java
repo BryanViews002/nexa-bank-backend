@@ -1,5 +1,6 @@
 package com.example.bank.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -29,6 +30,16 @@ public class User implements UserDetails {
     @Column(name = "full_name", length = 100)
     private String fullName;
 
+    @Column(name = "phone_number", length = 30)
+    private String phoneNumber;
+
+    @Column(length = 500)
+    private String address;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "kyc_status", nullable = false, length = 30)
+    private KycStatus kycStatus = KycStatus.NOT_SUBMITTED;
+
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "role_id", nullable = false)
     private Role role;
@@ -55,6 +66,7 @@ public class User implements UserDetails {
     }
 
     @Override
+    @JsonIgnore
     public String getPassword() {
         return passwordHash;
     }
@@ -104,6 +116,7 @@ public class User implements UserDetails {
         this.email = email;
     }
 
+    @JsonIgnore
     public String getPasswordHash() {
         return passwordHash;
     }
@@ -118,6 +131,30 @@ public class User implements UserDetails {
 
     public void setFullName(String fullName) {
         this.fullName = fullName;
+    }
+
+    public String getPhoneNumber() {
+        return phoneNumber;
+    }
+
+    public void setPhoneNumber(String phoneNumber) {
+        this.phoneNumber = phoneNumber;
+    }
+
+    public String getAddress() {
+        return address;
+    }
+
+    public void setAddress(String address) {
+        this.address = address;
+    }
+
+    public KycStatus getKycStatus() {
+        return kycStatus;
+    }
+
+    public void setKycStatus(KycStatus kycStatus) {
+        this.kycStatus = kycStatus;
     }
 
     public Role getRole() {
@@ -166,6 +203,13 @@ public class User implements UserDetails {
     }
 
     public boolean isLocked() {
-        return false;
+        return Boolean.TRUE.equals(locked);
+    }
+
+    public enum KycStatus {
+        NOT_SUBMITTED,
+        PENDING,
+        APPROVED,
+        REJECTED
     }
 }

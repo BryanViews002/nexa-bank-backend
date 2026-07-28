@@ -1,0 +1,2 @@
+ALTER TABLE otps
+    ADD COLUMN failed_attempts INT NOT NULL DEFAULT 0;

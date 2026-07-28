@@ -15,12 +15,16 @@ public class TransferDto {
 
     @NotNull(message = "Amount is required")
     @DecimalMin(value = "0.01", message = "Amount must be at least 0.01")
-    private double amount;
+    private BigDecimal amount;
+
+    private String description;
+
+    private String category;
 
     // Constructors
     public TransferDto() {}
 
-    public TransferDto(Long fromAccountId, String toIdentifier, double amount) {
+    public TransferDto(Long fromAccountId, String toIdentifier, BigDecimal amount) {
         this.fromAccountId = fromAccountId;
         this.toIdentifier = toIdentifier;
         this.amount = amount;
@@ -43,13 +47,27 @@ public class TransferDto {
         this.toIdentifier = toIdentifier;
     }
 
-    public double getAmount() {
+    public BigDecimal getAmount() {
         return amount;
     }
 
-    public void setAmount(double amount) {
+    public void setAmount(BigDecimal amount) {
         this.amount = amount;
     }
 
+    public String getDescription() {
+        return description;
+    }
 
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
+    }
 }

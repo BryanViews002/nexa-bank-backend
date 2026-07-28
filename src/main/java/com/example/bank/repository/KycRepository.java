@@ -8,4 +8,6 @@ import java.util.List;
 
 public interface KycRepository extends JpaRepository<KycDocument, Long> {
     List<KycDocument> findByStatus(KycDocument.KycStatus status);
+
+    List<KycDocument> findByUserIdOrderByUploadedAtDesc(Long userId);
 }

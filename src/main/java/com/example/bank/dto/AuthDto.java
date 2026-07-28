@@ -222,4 +222,58 @@ public class AuthDto {
             this.purpose = purpose;
         }
     }
+
+    public record RegistrationResponse(
+            String message,
+            String username,
+            Long userId,
+            String kycStatus,
+            boolean kycRequired,
+            String nextAction,
+            String redirectTo
+    ) {
+
+        public RegistrationResponse(String message, String username, Long userId, KycState state) {
+            this(
+                    message,
+                    username,
+                    userId,
+                    state.kycStatus(),
+                    state.kycRequired(),
+                    state.nextAction(),
+                    state.redirectTo()
+            );
+        }
+    }
+
+    public record AuthenticationResponse(
+            String message,
+            boolean authenticated,
+            Long userId,
+            String username,
+            String kycStatus,
+            boolean kycRequired,
+            String nextAction,
+            String redirectTo
+    ) {
+
+        public AuthenticationResponse(
+                String message,
+                boolean authenticated,
+                Long userId,
+                String username,
+                KycState state
+        ) {
+            this(
+                    message,
+                    authenticated,
+                    userId,
+                    username,
+                    state.kycStatus(),
+                    state.kycRequired(),
+                    state.nextAction(),
+                    state.redirectTo()
+            );
+        }
+    }
 }

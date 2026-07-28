@@ -27,6 +27,15 @@ public class KycDocument {
     @Enumerated(EnumType.STRING)
     private KycStatus status = KycStatus.PENDING;
 
+    @Column(name = "rejection_reason", length = 500)
+    private String rejectionReason;
+
+    @Column(name = "reviewed_at")
+    private Instant reviewedAt;
+
+    @Column(name = "reviewed_by_user_id")
+    private Long reviewedByUserId;
+
     private Instant uploadedAt;
 
     @PrePersist

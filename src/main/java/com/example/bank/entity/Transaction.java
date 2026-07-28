@@ -3,12 +3,18 @@ package com.example.bank.entity;
 import jakarta.persistence.*;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Data
 @Entity
-@Table(name = "transactions")
+@Table(name = "transactions", uniqueConstraints = {
+        @UniqueConstraint(
+                name = "uk_transaction_user_operation_idempotency",
+                columnNames = {"initiated_by_user_id", "type", "idempotency_key"}
+        )
+})
 public class Transaction {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -28,8 +34,35 @@ public class Transaction {
     @Column(name = "to_external_account")
     private String toExternalAccount;
 
-    @Column(nullable = false)
-    private double amount;
+    @Column(nullable = false, precision = 19, scale = 4)
+    private BigDecimal amount;
+
+    @Column(nullable = false, precision = 19, scale = 4)
+    private BigDecimal fee = BigDecimal.ZERO;
+
+    @Column(nullable = false, length = 3)
+    private String currency = "USD";
+
+    @Column(length = 500)
+    private String description;
+
+    @Column(length = 80)
+    private String category;
+
+    @Column(nullable = false, unique = true, length = 50)
+    private String reference;
+
+    @Column(name = "idempotency_key", length = 100)
+    private String idempotencyKey;
+
+    @Column(name = "initiated_by_user_id")
+    private Long initiatedByUserId;
+
+    @Column(name = "exchange_rate", precision = 19, scale = 8)
+    private BigDecimal exchangeRate;
+
+    @Column(columnDefinition = "TEXT")
+    private String metadata;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -47,13 +80,30 @@ public class Transaction {
         if (this.txUuid == null) {
             this.txUuid = UUID.randomUUID().toString();
         }
+        if (this.reference == null) {
+            this.reference = "NX-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
+        }
     }
 
     public enum TransactionType {
-        DEPOSIT, WITHDRAW, TRANSFER, BONUS
+        DEPOSIT,
+        WITHDRAW,
+        TRANSFER,
+        BONUS,
+        SCHEDULED_PAYMENT,
+        GOAL_CONTRIBUTION,
+        GOAL_WITHDRAWAL,
+        CARD_PURCHASE,
+        EXTERNAL_FUNDING,
+        EXTERNAL_PAYOUT,
+        LOAN_DISBURSEMENT,
+        LOAN_REPAYMENT,
+        FX_EXCHANGE,
+        PAYMENT_REQUEST,
+        REVERSAL
     }
 
     public enum TransactionStatus {
-        PENDING, COMPLETED, FAILED
+        PENDING, COMPLETED, FAILED, REVERSED
     }
 }

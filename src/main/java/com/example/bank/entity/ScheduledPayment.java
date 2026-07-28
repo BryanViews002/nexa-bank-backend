@@ -34,6 +34,24 @@ public class ScheduledPayment {
 
     private Instant lastRun;
 
+    @Column(length = 500)
+    private String description;
+
+    @Column(length = 80)
+    private String category = "BILLS";
+
+    @Column(name = "last_error", length = 1000)
+    private String lastError;
+
+    @Column(name = "failure_count", nullable = false)
+    private int failureCount;
+
+    @Column(name = "max_failures", nullable = false)
+    private int maxFailures = 3;
+
+    @Version
+    private int version;
+
     private Instant createdAt;
 
     @PrePersist
