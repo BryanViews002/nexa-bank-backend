@@ -78,7 +78,7 @@ public class OtpService {
     @Transactional
     public boolean verifyOtp(User user, String code, String purposeValue) {
         Otp.OtpPurpose purpose = parsePurpose(purposeValue);
-        Otp otp = otpRepository.findLatestValidOtp(user.getId(), purpose).orElse(null);
+        Otp otp = otpRepository.findLatestValidOtp(user.getId(), purpose, Instant.now()).orElse(null);
         if (otp == null) {
             return false;
         }

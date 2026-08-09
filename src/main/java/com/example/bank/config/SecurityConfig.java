@@ -4,6 +4,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.MediaType;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AuthenticationEventPublisher;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.DefaultAuthenticationEventPublisher;
@@ -14,11 +16,15 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.InvalidCsrfTokenException;
+import org.springframework.security.web.csrf.MissingCsrfTokenException;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 
@@ -92,16 +98,10 @@ public class SecurityConfig {
                         .deleteCookies("JSESSIONID", "XSRF-TOKEN")
                 )
                 .exceptionHandling(exceptions -> exceptions
-                        .accessDeniedHandler((request, response, exception) -> {
-                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                            response.setContentType("application/json");
-                            response.getWriter().write(
-                                    "{\"code\":\"ACCESS_DENIED\",\"message\":\"Access denied\"}"
-                            );
-                        })
+                        .accessDeniedHandler(this::handleAccessDenied)
                         .authenticationEntryPoint((request, response, exception) -> {
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                            response.setContentType("application/json");
+                            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
                             response.getWriter().write(
                                     "{\"code\":\"UNAUTHENTICATED\",\"message\":\"Authentication required\"}"
                             );
@@ -137,6 +137,32 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
+    }
+
+    private void handleAccessDenied(
+            jakarta.servlet.http.HttpServletRequest request,
+            HttpServletResponse response,
+            AccessDeniedException exception
+    ) throws IOException {
+        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+
+        if (exception instanceof MissingCsrfTokenException) {
+            response.getWriter().write(
+                    "{\"code\":\"CSRF_TOKEN_MISSING\",\"message\":\"Missing CSRF token\"}"
+            );
+            return;
+        }
+        if (exception instanceof InvalidCsrfTokenException) {
+            response.getWriter().write(
+                    "{\"code\":\"CSRF_TOKEN_INVALID\",\"message\":\"Invalid CSRF token\"}"
+            );
+            return;
+        }
+        response.getWriter().write(
+                "{\"code\":\"ACCESS_DENIED\",\"message\":\"Access denied\"}"
+        );
     }
 
     @Bean

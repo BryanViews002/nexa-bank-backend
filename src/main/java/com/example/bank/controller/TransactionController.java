@@ -42,7 +42,6 @@ public class TransactionController {
     }
 
     @PostMapping("/deposit")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<TransactionResponse> deposit(
             @Valid @RequestBody CashOperationRequest request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
