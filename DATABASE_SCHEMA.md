@@ -11,7 +11,7 @@ configuration, Git history, and Hibernate's generated MySQL DDL.
 
 Create the empty database:
 
-```sql
+```sq
 CREATE DATABASE bank_app
     CHARACTER SET utf8mb4
     COLLATE utf8mb4_unicode_ci;
